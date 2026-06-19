@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   // Must match the GitHub repo name for Pages to serve assets correctly.
   // URL: https://calculoss.github.io/cruelty_party/
-  base: '/cruelty_party/',
+  base: '/Cruelty_Party/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

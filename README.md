@@ -23,7 +23,7 @@ That's it. The workflow (`.github/workflows/deploy.yml`) runs automatically on
 every push to `main` or any `claude/*` branch. It builds the project and
 pushes the output to the `gh-pages` branch, which Pages then serves.
 
-**Live URL:** `https://calculoss.github.io/cruelty_party/`
+**Live URL:** `https://calculoss.github.io/Cruelty_Party/`
 
 ### Manual deploy
 
