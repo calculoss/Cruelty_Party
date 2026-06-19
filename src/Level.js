@@ -84,10 +84,10 @@ export class Level {
 
     // Small room in NE corner — "executive suite"
     // South wall of room (z = −6), x = 5..20
-    this._box( 12.5, WH / 2, -6,   15, WH, WT, MAT.wall);
-    // West wall of room (x = 5), z = −20..−6
-    this._box( 5,    WH / 2, -13,  WT, WH, 14, MAT.wall);
-    // Doorway gap left in west wall: z = −10..−8 (2u) — tight door
+    this._box( 12.5, WH / 2, -6,    15, WH, WT, MAT.wall);
+    // West wall of room (x = 5), with a 3u doorway gap at z = −11..−8
+    this._box( 5,    WH / 2, -15.5, WT, WH,  9, MAT.wall); // z = −20..−11
+    this._box( 5,    WH / 2, -7,    WT, WH,  2, MAT.wall); // z = −8..−6
 
     // ── Structural pillars (accent grey, add depth) ──
     const pillarPositions = [

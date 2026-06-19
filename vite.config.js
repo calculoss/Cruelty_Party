@@ -7,7 +7,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    // Reasonable target for iPad Safari (iOS 15+)
     target: ['es2020', 'safari15'],
+    // Three.js is ~500KB minified; this is expected and not a problem for our use case
+    chunkSizeWarningLimit: 600,
   },
 })

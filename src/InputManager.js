@@ -24,10 +24,25 @@ export class InputManager {
   _bindKeyboard() {
     window.addEventListener('keydown', e => {
       this._keys[e.code] = true;
-      // Prevent arrow keys from scrolling the page
       if (e.code.startsWith('Arrow')) e.preventDefault();
     });
     window.addEventListener('keyup', e => { this._keys[e.code] = false; });
+  }
+
+  /**
+   * Returns true and clears the flag — one-shot per keypress.
+   * Also consumed by the HTML interact button (set via flagInteract()).
+   */
+  consumeInteract() {
+    const fired = !!(this._keys['KeyE'] || this._interactFlag);
+    this._keys['KeyE']   = false;
+    this._interactFlag   = false;
+    return fired;
+  }
+
+  /** Called by the on-screen HARVEST button. */
+  flagInteract() {
+    this._interactFlag = true;
   }
 
   // ── Touch joystick ──────────────────────────────────────────────

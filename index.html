@@ -2,147 +2,216 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!--
-    maximum-scale=1.0 + user-scalable=no prevents Safari's pinch-zoom
-    interfering with the touch joystick.
-  -->
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
   />
-  <!-- Prevent tap highlight flash on iOS -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>INTEGRITY MARKET</title>
   <style>
-    /* ── Reset ────────────────────────────────────────────── */
+    /* ── Reset ──────────────────────────────────────────────── */
     *, *::before, *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+      margin: 0; padding: 0; box-sizing: border-box;
       -webkit-tap-highlight-color: transparent;
     }
-
     body {
       background: #0e1012;
       overflow: hidden;
-      /* Prevent rubber-band scroll on iOS while still getting pointer events */
       touch-action: none;
       font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
     }
+    #app canvas { display: block; width: 100vw !important; height: 100vh !important; }
 
-    /* Three.js canvas fills the window */
-    #app canvas {
-      display: block;
-      width: 100vw !important;
-      height: 100vh !important;
-    }
+    /* ── Utility ────────────────────────────────────────────── */
+    .hidden { opacity: 0 !important; pointer-events: none !important; }
 
-    /* ── HUD ─────────────────────────────────────────────── */
+    /* ── HUD ─────────────────────────────────────────────────── */
     #hud {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      /* safe-area insets for iPad notch / home-bar */
-      padding: max(16px, env(safe-area-inset-top))
-               max(20px, env(safe-area-inset-right))
-               max(16px, env(safe-area-inset-bottom))
-               max(20px, env(safe-area-inset-left));
+      position: fixed; inset: 0; pointer-events: none;
+      padding:
+        max(16px, env(safe-area-inset-top))
+        max(20px, env(safe-area-inset-right))
+        max(16px, env(safe-area-inset-bottom))
+        max(20px, env(safe-area-inset-left));
     }
 
     #logo {
       position: absolute;
       top: max(18px, env(safe-area-inset-top));
       left: max(22px, env(safe-area-inset-left));
-      font-size: 11px;
-      letter-spacing: 0.25em;
-      color: rgba(255, 255, 255, 0.3);
-      text-transform: uppercase;
+      font-size: 11px; letter-spacing: 0.25em;
+      color: rgba(255,255,255,0.3); text-transform: uppercase;
     }
+    #logo .accent { color: #00c8e8; }
 
-    #logo .accent {
-      color: #00c8e8;
-    }
-
-    #phase-tag {
+    /* Alert bar — top-right */
+    #alert-bar {
       position: absolute;
-      top: max(18px, env(safe-area-inset-top));
-      right: max(22px, env(safe-area-inset-right));
-      font-size: 9px;
-      letter-spacing: 0.2em;
-      color: rgba(255, 255, 255, 0.18);
+      top: max(14px, env(safe-area-inset-top));
+      right: max(18px, env(safe-area-inset-right));
+      display: flex; align-items: center; gap: 8px;
+      transition: opacity 0.3s;
+    }
+    #alert-label {
+      font-size: 10px; letter-spacing: 0.2em;
       text-transform: uppercase;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      padding: 3px 8px;
-      border-radius: 2px;
+      color: #00c8e8;
+      transition: color 0.4s;
+    }
+    /* Pip row — three small squares that fill with alert colour */
+    #pip-row {
+      display: flex; gap: 3px;
+    }
+    .pip {
+      width: 6px; height: 6px; border-radius: 1px;
+      background: rgba(255,255,255,0.12);
+      transition: background 0.3s;
+    }
+    /* Fill pips based on data-level on #alert-bar */
+    #alert-bar[data-level="1"] .pip:nth-child(1)                { background: #ffcc00; }
+    #alert-bar[data-level="2"] .pip:nth-child(1),
+    #alert-bar[data-level="2"] .pip:nth-child(2)                { background: #ff6600; }
+    #alert-bar[data-level="3"] .pip:nth-child(1),
+    #alert-bar[data-level="3"] .pip:nth-child(2),
+    #alert-bar[data-level="3"] .pip:nth-child(3)                { background: #ff1111; }
+
+    /* Dossier status — bottom-centre above joystick zone */
+    #dossier-status {
+      position: absolute;
+      bottom: max(180px, calc(env(safe-area-inset-bottom) + 180px));
+      left: 50%; transform: translateX(-50%);
+      font-size: 10px; letter-spacing: 0.22em;
+      text-transform: uppercase; white-space: nowrap;
+      color: #00c8e8;
+      border: 1px solid rgba(0,200,232,0.35);
+      padding: 4px 10px; border-radius: 2px;
+      background: rgba(0,200,232,0.06);
+      opacity: 1; transition: opacity 0.4s;
     }
 
-    /* Move hint — shown briefly, then fades */
+    /* Interact prompt — floats in-screen, centre */
+    #interact-prompt {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, calc(-50% + 60px));
+      font-size: 10px; letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      opacity: 1; transition: opacity 0.2s;
+    }
+
+    /* Move hint */
     #hint {
       position: absolute;
-      bottom: max(160px, calc(env(safe-area-inset-bottom) + 160px));
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 10px;
-      letter-spacing: 0.18em;
-      color: rgba(255, 255, 255, 0.22);
+      bottom: max(165px, calc(env(safe-area-inset-bottom) + 165px));
+      left: 50%; transform: translateX(-50%);
+      font-size: 10px; letter-spacing: 0.18em;
+      color: rgba(255,255,255,0.22); text-transform: uppercase;
+      white-space: nowrap; transition: opacity 1s ease;
+    }
+
+    /* ── End-state overlay ───────────────────────────────────── */
+    #overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,12,14,0.85);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px;
+      opacity: 1; transition: opacity 0.5s;
+    }
+    #overlay-title {
+      font-size: 20px; letter-spacing: 0.3em;
+      text-transform: uppercase; color: #fff;
+    }
+    #overlay-sub {
+      font-size: 11px; letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(255,255,255,0.4);
+    }
+    #restart-btn {
+      margin-top: 20px;
+      font-family: inherit; font-size: 10px; letter-spacing: 0.22em;
       text-transform: uppercase;
-      text-align: center;
-      white-space: nowrap;
-      transition: opacity 1s ease;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.5);
+      padding: 8px 20px; border-radius: 2px;
+      cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    }
+    #restart-btn:hover, #restart-btn:active {
+      border-color: rgba(255,255,255,0.6);
+      color: #fff;
     }
 
-    #hint.hidden {
-      opacity: 0;
-    }
-
-    /* ── Touch joystick ──────────────────────────────────── */
+    /* ── Touch controls ─────────────────────────────────────── */
     #joystick-zone {
       position: fixed;
-      /* Thumb-reach bottom-left, respects safe area */
       bottom: max(44px, env(safe-area-inset-bottom));
       left:   max(36px, env(safe-area-inset-left));
-      width:  120px;
-      height: 120px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      /* Allow pointer capture on this element */
-      touch-action: none;
-      pointer-events: all;
+      width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      touch-action: none; pointer-events: all;
+    }
+    #joystick-handle {
+      position: absolute; top: 50%; left: 50%;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(0,200,232,0.65);
+      border: 1px solid rgba(0,200,232,0.9);
+      transform: translate(-50%, -50%);
+      pointer-events: none; will-change: transform;
     }
 
-    #joystick-handle {
-      position: absolute;
-      top:  50%;
-      left: 50%;
-      width:  44px;
-      height: 44px;
-      border-radius: 50%;
-      background: rgba(0, 200, 232, 0.65);
-      border: 1px solid rgba(0, 200, 232, 0.9);
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      /* Hardware-accelerated so it doesn't cause reflows */
-      will-change: transform;
+    /* Harvest button — bottom-right, mirrors joystick */
+    #harvest-btn {
+      position: fixed;
+      bottom: max(68px, calc(env(safe-area-inset-bottom) + 68px));
+      right:  max(48px, env(safe-area-inset-right));
+      width: 72px; height: 72px; border-radius: 50%;
+      background: rgba(0,200,232,0.12);
+      border: 1px solid rgba(0,200,232,0.5);
+      color: #00c8e8;
+      font-family: inherit; font-size: 8px; letter-spacing: 0.18em;
+      text-transform: uppercase; text-align: center;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      touch-action: none; pointer-events: all;
+      opacity: 1; transition: opacity 0.2s, background 0.15s;
     }
+    #harvest-btn:active { background: rgba(0,200,232,0.25); }
   </style>
 </head>
 <body>
-  <!-- Three.js mounts here -->
   <div id="app"></div>
 
-  <!-- HUD overlay (non-interactive, pointer-events: none) -->
+  <!-- HUD (non-interactive layer) -->
   <div id="hud">
     <div id="logo">INTEGRITY <span class="accent">MARKET</span></div>
-    <div id="phase-tag">Phase 1 — Foundation</div>
-    <div id="hint">WASD / ARROWS — or use the joystick</div>
+
+    <div id="alert-bar" data-level="0">
+      <span id="alert-label">CLEAR</span>
+      <div id="pip-row">
+        <div class="pip"></div>
+        <div class="pip"></div>
+        <div class="pip"></div>
+      </div>
+    </div>
+
+    <div id="dossier-status" class="hidden">▪ DOSSIER SECURED</div>
+    <div id="interact-prompt" class="hidden">[ E ] HARVEST</div>
+    <div id="hint">WASD / arrows — or use the joystick</div>
   </div>
 
-  <!-- Touch joystick (interactive, outside HUD so pointer-events work) -->
-  <div id="joystick-zone">
-    <div id="joystick-handle"></div>
+  <!-- End-state overlay -->
+  <div id="overlay" class="hidden">
+    <div id="overlay-title"></div>
+    <div id="overlay-sub"></div>
+    <button id="restart-btn">RESTART MISSION</button>
   </div>
+
+  <!-- Touch controls (interactive, outside HUD) -->
+  <div id="joystick-zone"><div id="joystick-handle"></div></div>
+  <div id="harvest-btn" class="hidden">HARVEST</div>
 
   <script type="module" src="/src/main.js"></script>
 </body>
