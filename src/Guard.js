@@ -90,8 +90,10 @@ export class Guard {
     });
 
     const mesh = new THREE.Mesh(geo, this._coneMat);
-    // Rotate so the fan lies flat on the ground
-    mesh.rotation.x = -Math.PI / 2;
+    // rotation.x = +π/2 maps the shape's +Y tip to the group's +Z axis,
+    // which matches the facing direction used in _inVisionCone.
+    // (−π/2 would point the cone backward — visual and detection would be 180° apart.)
+    mesh.rotation.x = Math.PI / 2;
     mesh.position.y  = 0.06;
 
     this._group.add(mesh);
