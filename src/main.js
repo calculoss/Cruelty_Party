@@ -172,10 +172,10 @@ function updateHUD(canInteract, hasDoc) {
   if (elHarvestBtn) elHarvestBtn.classList.toggle('hidden', !canInteract);
 
   // End-state overlay
-  if (gameState.isComplete() || gameState.isCaught()) {
+  if (gameState.isComplete || gameState.isCaught) {
     if (elOverlay && elOverlay.classList.contains('hidden')) {
       elOverlay.classList.remove('hidden');
-      if (gameState.isComplete()) {
+      if (gameState.isComplete) {
         if (elOverlayTitle) elOverlayTitle.textContent = 'DOSSIER SECURED';
         if (elOverlaySub)   elOverlaySub.textContent   = 'The market will be pleased.';
       } else {
@@ -208,7 +208,7 @@ function loop(timestamp) {
   const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
   lastTimestamp = timestamp;
 
-  const active = gameState.isPlaying();
+  const active = gameState.isPlaying;
 
   // ── Input → movement (freeze on end-state) ──
   if (active) {
