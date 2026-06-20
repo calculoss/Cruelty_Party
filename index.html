@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>INTEGRITY MARKET</title>
+  <style>
+    /* ── Reset ──────────────────────────────────────────────────────── */
+    *, *::before, *::after {
+      margin: 0; padding: 0; box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background: #0e1012;
+      overflow: hidden;
+      touch-action: none;
+      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+    }
+    #app canvas { display: block; width: 100vw !important; height: 100vh !important; }
+
+    /* ── Utility ────────────────────────────────────────────────────── */
+    .hidden { opacity: 0 !important; pointer-events: none !important; }
+
+    /* ── HUD (pointer-events:none wrapper) ──────────────────────────── */
+    #hud {
+      position: fixed; inset: 0; pointer-events: none;
+    }
+
+    #logo {
+      position: absolute;
+      top: max(18px, env(safe-area-inset-top));
+      left: max(22px, env(safe-area-inset-left));
+      font-size: 11px; letter-spacing: 0.25em;
+      color: rgba(255,255,255,0.3); text-transform: uppercase;
+    }
+    #logo .accent { color: #00c8e8; }
+    #contract-rank {
+      position: absolute;
+      top: max(36px, calc(env(safe-area-inset-top) + 20px));
+      left: max(22px, env(safe-area-inset-left));
+      font-size: 8px; letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.18); text-transform: uppercase;
+    }
+
+    /* Alert bar — top-left, below logo */
+    #alert-bar {
+      position: absolute;
+      top: max(44px, calc(env(safe-area-inset-top) + 28px));
+      left: max(22px, env(safe-area-inset-left));
+      display: flex; align-items: center; gap: 8px;
+      transition: opacity 0.3s;
+    }
+    #alert-label {
+      font-size: 10px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: #00c8e8;
+      transition: color 0.4s;
+    }
+    #pip-row { display: flex; gap: 3px; }
+    .pip {
+      width: 6px; height: 6px; border-radius: 1px;
+      background: rgba(255,255,255,0.12);
+      transition: background 0.3s;
+    }
+    #alert-bar[data-level="1"] .pip:nth-child(1)               { background: #ffcc00; }
+    #alert-bar[data-level="2"] .pip:nth-child(1),
+    #alert-bar[data-level="2"] .pip:nth-child(2)               { background: #ff6600; }
+    #alert-bar[data-level="3"] .pip:nth-child(1),
+    #alert-bar[data-level="3"] .pip:nth-child(2),
+    #alert-bar[data-level="3"] .pip:nth-child(3)               { background: #ff1111; }
+
+    /* Move hint — bottom-centre above joystick */
+    #hint {
+      position: absolute;
+      bottom: max(175px, calc(env(safe-area-inset-bottom) + 175px));
+      left: 50%; transform: translateX(-50%);
+      font-size: 10px; letter-spacing: 0.18em;
+      color: rgba(255,255,255,0.22); text-transform: uppercase;
+      white-space: nowrap; transition: opacity 1s ease;
+    }
+
+    /* ── Inventory chips ────────────────────────────────────────────── */
+    #inv-chips {
+      position: fixed;
+      bottom: max(198px, calc(env(safe-area-inset-bottom) + 198px));
+      left: 50%; transform: translateX(-50%);
+      display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+      pointer-events: none;
+      min-height: 22px;
+    }
+    .inv-chip {
+      font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase;
+      border: 1px solid; padding: 3px 7px; border-radius: 2px;
+      background: rgba(0,0,0,0.5);
+    }
+
+    /* ── Market panel (right sidebar) ──────────────────────────────── */
+    #market-panel {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top));
+      right: max(14px, env(safe-area-inset-right));
+      width: 168px;
+      background: rgba(10,12,14,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 3px;
+      padding: 11px 13px 12px;
+      pointer-events: none;
+    }
+    #mp-header {
+      font-size: 8px; letter-spacing: 0.28em;
+      text-transform: uppercase; color: rgba(255,255,255,0.22);
+      margin-bottom: 11px;
+    }
+    .mp-row {
+      display: flex; align-items: center; gap: 7px; margin-bottom: 8px;
+    }
+    .mp-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+    .mp-label {
+      font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: rgba(255,255,255,0.42); flex: 1; line-height: 1.2;
+    }
+    .mp-price {
+      font-size: 9px; letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.68); white-space: nowrap;
+    }
+    .mp-price.fatigued { color: #ff6644; }
+    .mp-trend {
+      font-size: 7px; letter-spacing: 0.04em; color: #ff6644; margin-left: 2px;
+    }
+    #mp-divider {
+      border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 8px 0;
+    }
+    #mp-balance-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+    }
+    #mp-balance-label {
+      font-size: 8px; letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(255,255,255,0.22);
+    }
+    #market-balance-value {
+      font-size: 11px; letter-spacing: 0.05em; color: #00c8e8;
+    }
+
+    /* ── Harvest modal ──────────────────────────────────────────────── */
+    #harvest-modal {
+      position: fixed; inset: 0;
+      background: rgba(8,10,12,0.88);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #harvest-card {
+      width: min(390px, 90vw);
+      background: #12161a;
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 4px;
+      padding: 28px 26px 22px;
+      opacity: 0; transform: translateY(14px) scale(0.97);
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+    #harvest-card.visible {
+      opacity: 1; transform: translateY(0) scale(1);
+    }
+    #harvest-type {
+      font-size: 9px; letter-spacing: 0.38em;
+      text-transform: uppercase; margin-bottom: 18px;
+    }
+    .harvest-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 2px; padding: 11px 13px;
+    }
+    .harvest-block-label {
+      font-size: 7px; letter-spacing: 0.3em; text-transform: uppercase;
+      color: rgba(255,255,255,0.22); margin-bottom: 6px;
+    }
+    .harvest-block-quote {
+      font-size: 12px; line-height: 1.6;
+      color: rgba(255,255,255,0.72);
+    }
+    .harvest-vs {
+      text-align: center; font-size: 8px; letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.18); padding: 9px 0;
+    }
+    #harvest-footer {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-top: 18px;
+    }
+    #harvest-value {
+      font-size: 20px; letter-spacing: 0.04em; color: #00c8e8;
+    }
+    #harvest-secure {
+      font-family: inherit; font-size: 8px; letter-spacing: 0.25em;
+      text-transform: uppercase;
+      background: rgba(0,200,232,0.1);
+      border: 1px solid rgba(0,200,232,0.38);
+      color: #00c8e8; padding: 10px 16px; border-radius: 2px;
+      cursor: pointer; transition: background 0.15s;
+      touch-action: manipulation;
+    }
+    #harvest-secure:active { background: rgba(0,200,232,0.22); }
+
+    /* ── Sell panel ─────────────────────────────────────────────────── */
+    #sell-panel {
+      position: fixed; inset: 0;
+      background: rgba(8,10,12,0.92);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #sell-card {
+      width: min(400px, 90vw);
+      background: #12161a;
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 4px;
+      padding: 26px 24px 22px;
+    }
+    #sell-header {
+      font-size: 8px; letter-spacing: 0.35em; text-transform: uppercase;
+      color: rgba(255,255,255,0.25); margin-bottom: 16px;
+    }
+    #sell-items { margin-bottom: 14px; }
+    .sell-row {
+      display: flex; align-items: flex-start; gap: 9px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .sell-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      flex-shrink: 0; margin-top: 3px;
+    }
+    .sell-label {
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.52); flex: 1; line-height: 1.4;
+    }
+    .sell-amount {
+      font-size: 11px; letter-spacing: 0.05em;
+      color: rgba(255,255,255,0.72); white-space: nowrap; text-align: right;
+    }
+    .sell-amount.fatigued { color: #ff6644; }
+    .fatigue-tag {
+      display: block; font-size: 7px; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #ff6644; margin-top: 2px;
+    }
+    #sell-totals { padding-top: 12px; }
+    .sell-total-row {
+      display: flex; justify-content: space-between;
+      align-items: baseline; margin-bottom: 6px;
+    }
+    .sell-total-label {
+      font-size: 8px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(255,255,255,0.22);
+    }
+    #sell-run-total {
+      font-size: 16px; letter-spacing: 0.05em; color: #00c8e8;
+    }
+    #sell-session-balance {
+      font-size: 11px; letter-spacing: 0.05em; color: rgba(255,255,255,0.42);
+    }
+    #sell-continue {
+      margin-top: 18px; width: 100%;
+      font-family: inherit; font-size: 9px; letter-spacing: 0.28em;
+      text-transform: uppercase;
+      background: rgba(0,200,232,0.08);
+      border: 1px solid rgba(0,200,232,0.32);
+      color: #00c8e8; padding: 12px; border-radius: 2px;
+      cursor: pointer; transition: background 0.15s;
+      touch-action: manipulation;
+    }
+    #sell-continue:active { background: rgba(0,200,232,0.2); }
+
+    /* ── End-state overlay ──────────────────────────────────────────── */
+    #overlay {
+      position: fixed; inset: 0;
+      background: rgba(10,12,14,0.88);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px; z-index: 30;
+      opacity: 1; transition: opacity 0.5s;
+    }
+    #overlay-title {
+      font-size: 20px; letter-spacing: 0.3em;
+      text-transform: uppercase; color: #fff;
+    }
+    #overlay-sub {
+      font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(255,255,255,0.38);
+      max-width: 340px; text-align: center; line-height: 1.6;
+    }
+    #overlay-next {
+      margin-top: 6px;
+      border: 1px solid rgba(255,100,60,0.3);
+      border-radius: 3px; padding: 10px 18px;
+      text-align: center; background: rgba(255,80,40,0.05);
+    }
+    #overlay-next-rank {
+      font-size: 9px; letter-spacing: 0.32em; text-transform: uppercase;
+      color: #ff8855; margin-bottom: 4px;
+    }
+    #overlay-next-terms {
+      font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255,136,85,0.6);
+    }
+    .overlay-btns {
+      display: flex; gap: 10px; margin-top: 14px;
+      pointer-events: all;
+    }
+    .overlay-btn {
+      font-family: inherit; font-size: 10px; letter-spacing: 0.22em;
+      text-transform: uppercase; background: transparent;
+      border: 1px solid rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.45);
+      padding: 9px 18px; border-radius: 2px;
+      cursor: pointer; transition: border-color 0.2s, color 0.2s;
+    }
+    .overlay-btn:hover, .overlay-btn:active {
+      border-color: rgba(255,255,255,0.6); color: #fff;
+    }
+    #advance-btn {
+      border-color: rgba(0,200,232,0.4); color: #00c8e8;
+    }
+    #advance-btn:hover, #advance-btn:active {
+      border-color: #00c8e8; color: #fff; background: rgba(0,200,232,0.1);
+    }
+    #reset-btn {
+      border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.28);
+    }
+    #reset-btn:hover, #reset-btn:active {
+      border-color: rgba(255,255,255,0.4); color: rgba(255,255,255,0.6);
+    }
+
+    /* ── Touch controls ─────────────────────────────────────────────── */
+    #joystick-zone {
+      position: fixed;
+      bottom: max(44px, env(safe-area-inset-bottom));
+      left:   max(36px, env(safe-area-inset-left));
+      width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      touch-action: none; pointer-events: all;
+    }
+    #joystick-handle {
+      position: absolute; top: 50%; left: 50%;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: rgba(0,200,232,0.65);
+      border: 1px solid rgba(0,200,232,0.9);
+      transform: translate(-50%, -50%);
+      pointer-events: none; will-change: transform;
+    }
+
+    /* Harvest button — bottom-right, mirrors joystick */
+    #harvest-btn {
+      position: fixed;
+      bottom: max(68px, calc(env(safe-area-inset-bottom) + 68px));
+      right:  max(48px, env(safe-area-inset-right));
+      width: 72px; height: 72px; border-radius: 50%;
+      background: rgba(0,200,232,0.12);
+      border: 1px solid rgba(0,200,232,0.5);
+      color: #00c8e8;
+      font-family: inherit; font-size: 8px; letter-spacing: 0.18em;
+      text-transform: uppercase; text-align: center;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      touch-action: none; pointer-events: all;
+      opacity: 1; transition: opacity 0.2s, background 0.15s;
+    }
+    #harvest-btn:active { background: rgba(0,200,232,0.25); }
+  </style>
+  <script type="module" crossorigin src="/Cruelty_Party/assets/index-Y9cgeZKe.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- HUD (non-interactive passthrough layer) -->
+  <div id="hud">
+    <div id="logo">INTEGRITY <span class="accent">MARKET</span></div>
+    <div id="contract-rank"></div>
+
+    <div id="alert-bar" data-level="0">
+      <span id="alert-label">CLEAR</span>
+      <div id="pip-row">
+        <div class="pip"></div>
+        <div class="pip"></div>
+        <div class="pip"></div>
+      </div>
+    </div>
+
+    <div id="hint">WASD / arrows — or use the joystick</div>
+  </div>
+
+  <!-- Inventory chips (bottom-centre, above joystick) -->
+  <div id="inv-chips"></div>
+
+  <!-- Market panel (right sidebar) -->
+  <div id="market-panel">
+    <div id="mp-header">Integrity Market</div>
+    <div id="market-rows"></div>
+    <hr id="mp-divider" />
+    <div id="mp-balance-row">
+      <span id="mp-balance-label">Balance</span>
+      <span id="market-balance-value">$0</span>
+    </div>
+  </div>
+
+  <!-- Harvest modal -->
+  <div id="harvest-modal" class="hidden">
+    <div id="harvest-card">
+      <div id="harvest-type"></div>
+      <div class="harvest-block">
+        <div class="harvest-block-label">Said</div>
+        <div id="harvest-said" class="harvest-block-quote"></div>
+      </div>
+      <div class="harvest-vs">— vs —</div>
+      <div class="harvest-block">
+        <div class="harvest-block-label">Did</div>
+        <div id="harvest-did" class="harvest-block-quote"></div>
+      </div>
+      <div id="harvest-footer">
+        <div id="harvest-value"></div>
+        <button id="harvest-secure">SECURE DOSSIER</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sell panel -->
+  <div id="sell-panel" class="hidden">
+    <div id="sell-card">
+      <div id="sell-header">Transaction Summary</div>
+      <div id="sell-items"></div>
+      <div id="sell-totals">
+        <div class="sell-total-row">
+          <span class="sell-total-label">This run</span>
+          <span id="sell-run-total">$0</span>
+        </div>
+        <div class="sell-total-row">
+          <span class="sell-total-label">Session balance</span>
+          <span id="sell-session-balance">$0</span>
+        </div>
+      </div>
+      <button id="sell-continue">CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- End-state overlay -->
+  <div id="overlay" class="hidden">
+    <div id="overlay-title"></div>
+    <div id="overlay-sub"></div>
+    <div id="overlay-next" class="hidden">
+      <div id="overlay-next-rank"></div>
+      <div id="overlay-next-terms"></div>
+    </div>
+    <div class="overlay-btns">
+      <button id="advance-btn" class="overlay-btn">NEXT CONTRACT</button>
+      <button id="reset-btn"   class="overlay-btn">RESET AGENCY</button>
+    </div>
+  </div>
+
+  <!-- Touch controls (interactive, outside pointer-events:none HUD) -->
+  <div id="joystick-zone"><div id="joystick-handle"></div></div>
+  <div id="harvest-btn" class="hidden">HARVEST</div>
+
+</body>
+</html>
