@@ -2,20 +2,18 @@ import * as THREE from 'three';
 
 /**
  * Guard — patrols a waypoint loop, has a visible vision cone,
- * and accumulates suspicion when the player enters the cone.
+ * accumulates suspicion when the player enters the cone AND
+ * has line-of-sight to the player (raycasted against wall meshes).
  *
- * Suspicion is a 0–1 scalar. max suspicion across all guards
- * drives the alert state in GameState.
- *
- * speedMult and suspicionMult are set by ContractManager each run.
- * Guards see through walls — line-of-sight raycasting comes in Phase 5.
+ * speedMult / suspicionMult are scaled per contract tier by ContractManager.
  */
 
-const BASE_SPEED       = 2.8;  // world units/sec at speedMult = 1
-const VISION_RANGE     = 8;    // world units
-const VISION_HALF_ANG  = 55;   // degrees each side
-const SUSPICION_RISE   = 1.0;  // per second at suspicionMult = 1
-const SUSPICION_DECAY  = 0.6;  // per second (decay is not multiplied — player can always retreat)
+const BASE_SPEED      = 2.8;  // world units/sec at speedMult = 1
+const VISION_RANGE    = 8;
+const VISION_HALF_ANG = 55;   // degrees each side
+const SUSPICION_RISE  = 1.0;  // per second at suspicionMult = 1
+const SUSPICION_DECAY = 0.6;  // per second (not multiplied — retreat always works)
+const EYE_HEIGHT      = 1.6;  // ray origin Y — above desk tops, below wall tops
 
 const CONE_CLEAR   = new THREE.Color(0xffcc00);
 const CONE_ALERTED = new THREE.Color(0xff2200);
@@ -24,14 +22,23 @@ export class Guard {
   /**
    * @param {THREE.Scene} scene
    * @param {{ waypoints: THREE.Vector3[], color?: number,
-   *           speedMult?: number, suspicionMult?: number }} opts
+   *           speedMult?: number, suspicionMult?: number,
+   *           wallMeshes?: THREE.Mesh[] }} opts
    */
-  constructor(scene, { waypoints, color = 0x4a5a6a, speedMult = 1, suspicionMult = 1 }) {
+  constructor(scene, { waypoints, color = 0x4a5a6a, speedMult = 1, suspicionMult = 1, wallMeshes = [] }) {
     this._waypoints     = waypoints;
     this._wpIndex       = 0;
     this._suspicion     = 0;
     this._speedMult     = speedMult;
     this._suspicionMult = suspicionMult;
+    this._wallMeshes    = wallMeshes;
+
+    // Pre-allocated to avoid per-frame GC pressure
+    this._raycaster = new THREE.Raycaster();
+    this._raycaster.near = 0.5; // skip guard's own volume
+    this._rayFrom   = new THREE.Vector3();
+    this._rayDir    = new THREE.Vector3();
+    this._rayTo     = new THREE.Vector3();
 
     this._group = new THREE.Group();
     scene.add(this._group);
@@ -83,20 +90,13 @@ export class Guard {
     });
 
     const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), this._coneMat);
-    // +π/2 maps shape's +Y to group's +Z, matching _inVisionCone forward direction.
-    mesh.rotation.x = Math.PI / 2;
+    mesh.rotation.x = Math.PI / 2; // +π/2 maps shape +Y → group +Z (matches facing direction)
     mesh.position.y = 0.06;
     this._group.add(mesh);
   }
 
   // ── Update ───────────────────────────────────────────────────────────────
 
-  /**
-   * @param {number}        dt
-   * @param {THREE.Vector3} playerPos
-   * @param {boolean}       gameActive
-   * @returns {number}  suspicion 0–1
-   */
   update(dt, playerPos, gameActive) {
     if (!gameActive) return this._suspicion;
 
@@ -118,13 +118,15 @@ export class Guard {
 
   // ── API ──────────────────────────────────────────────────────────────────
 
-  /** Update difficulty multipliers for a new contract tier. */
   setMultipliers(speedMult, suspicionMult) {
     this._speedMult     = speedMult;
     this._suspicionMult = suspicionMult;
   }
 
-  /** Return guard to start of patrol route and clear suspicion. */
+  setWaypoints(waypoints) {
+    this._waypoints = waypoints;
+  }
+
   reset() {
     this._wpIndex   = 0;
     this._suspicion = 0;
@@ -159,15 +161,29 @@ export class Guard {
     const pos = this._group.position;
     const dx  = playerPos.x - pos.x;
     const dz  = playerPos.z - pos.z;
+    const distSq = dx * dx + dz * dz;
 
-    if (dx * dx + dz * dz > VISION_RANGE * VISION_RANGE) return false;
+    if (distSq > VISION_RANGE * VISION_RANGE) return false;
 
     const fx  = Math.sin(this._group.rotation.y);
     const fz  = Math.cos(this._group.rotation.y);
-    const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) return true;
+    const len = Math.sqrt(distSq);
+    if (len < 0.01) return true; // player standing on guard
 
     const dot = (fx * dx + fz * dz) / len;
-    return dot > Math.cos((VISION_HALF_ANG * Math.PI) / 180);
+    if (dot <= Math.cos((VISION_HALF_ANG * Math.PI) / 180)) return false;
+
+    // Line-of-sight: cast a ray at eye height and check for wall intersections
+    if (this._wallMeshes.length > 0) {
+      this._rayFrom.set(pos.x, EYE_HEIGHT, pos.z);
+      this._rayTo.set(playerPos.x, EYE_HEIGHT, playerPos.z);
+      this._rayDir.subVectors(this._rayTo, this._rayFrom).normalize();
+      this._raycaster.set(this._rayFrom, this._rayDir);
+      const hits = this._raycaster.intersectObjects(this._wallMeshes, false);
+      // Blocked if a wall is closer than the player
+      if (hits.length > 0 && hits[0].distance < len - 0.2) return false;
+    }
+
+    return true;
   }
 }

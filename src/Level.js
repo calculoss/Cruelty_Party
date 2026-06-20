@@ -20,10 +20,11 @@ const MAT = {
 
 export class Level {
   constructor(scene) {
-    this._group  = new THREE.Group();
+    this._group     = new THREE.Group();
     scene.add(this._group);
 
-    this._solids = []; // { minX, maxX, minZ, maxZ } — XZ footprints for collision
+    this._solids    = []; // { minX, maxX, minZ, maxZ } for AABB collision
+    this._wallMeshes = []; // THREE.Mesh refs for guard LoS raycasting
 
     this.bounds = { minX: -19, maxX: 19, minZ: -19, maxZ: 19 };
 
@@ -124,7 +125,11 @@ export class Level {
         minZ: z - d / 2,
         maxZ: z + d / 2,
       });
+      this._wallMeshes.push(mesh);
     }
     return mesh;
   }
+
+  /** THREE.Mesh array for guard line-of-sight raycasting. */
+  get wallMeshes() { return this._wallMeshes; }
 }
