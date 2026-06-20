@@ -86,7 +86,6 @@ export class Player {
    * @param {import('./Level.js').Level} level
    */
   move(sx, sy, dt, level) {
-    // Map screen direction → world XZ
     const wx = sx - sy;
     const wz = -sx - sy;
 
@@ -96,20 +95,25 @@ export class Player {
       return;
     }
 
-    const nx = wx / len;
-    const nz = wz / len;
+    const nx   = wx / len;
+    const nz   = wz / len;
     const step = SPEED * dt;
+    const pos  = this._group.position;
 
-    this._group.position.x += nx * step;
-    this._group.position.z += nz * step;
+    if (level) {
+      // Axis-separated collision — try X then Z independently so the player
+      // slides along wall faces rather than stopping dead on diagonal contact.
+      const tryX = pos.x + nx * step;
+      if (!level.collidesAt(tryX, pos.z)) pos.x = tryX;
+      const tryZ = pos.z + nz * step;
+      if (!level.collidesAt(pos.x, tryZ)) pos.z = tryZ;
+      level.clamp(pos);
+    } else {
+      pos.x += nx * step;
+      pos.z += nz * step;
+    }
 
-    // Keep inside the level perimeter
-    if (level) level.clamp(this._group.position);
-
-    // Face the movement direction (Y rotation around world up)
-    const angle = Math.atan2(nx, nz);
-    this._group.rotation.y = angle;
-
+    this._group.rotation.y = Math.atan2(nx, nz);
     this._isMoving = true;
     this._bobTime += dt;
   }
