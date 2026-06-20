@@ -39,6 +39,13 @@
       color: rgba(255,255,255,0.3); text-transform: uppercase;
     }
     #logo .accent { color: #00c8e8; }
+    #contract-rank {
+      position: absolute;
+      top: max(36px, calc(env(safe-area-inset-top) + 20px));
+      left: max(22px, env(safe-area-inset-left));
+      font-size: 8px; letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.18); text-transform: uppercase;
+    }
 
     /* Alert bar — top-left, below logo */
     #alert-bar {
@@ -272,7 +279,7 @@
       background: rgba(10,12,14,0.88);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 14px; z-index: 30;
+      gap: 12px; z-index: 30;
       opacity: 1; transition: opacity 0.5s;
     }
     #overlay-title {
@@ -284,18 +291,46 @@
       color: rgba(255,255,255,0.38);
       max-width: 340px; text-align: center; line-height: 1.6;
     }
-    #restart-btn {
-      margin-top: 20px;
+    #overlay-next {
+      margin-top: 6px;
+      border: 1px solid rgba(255,100,60,0.3);
+      border-radius: 3px; padding: 10px 18px;
+      text-align: center; background: rgba(255,80,40,0.05);
+    }
+    #overlay-next-rank {
+      font-size: 9px; letter-spacing: 0.32em; text-transform: uppercase;
+      color: #ff8855; margin-bottom: 4px;
+    }
+    #overlay-next-terms {
+      font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255,136,85,0.6);
+    }
+    .overlay-btns {
+      display: flex; gap: 10px; margin-top: 14px;
+      pointer-events: all;
+    }
+    .overlay-btn {
       font-family: inherit; font-size: 10px; letter-spacing: 0.22em;
       text-transform: uppercase; background: transparent;
       border: 1px solid rgba(255,255,255,0.22);
       color: rgba(255,255,255,0.45);
-      padding: 9px 22px; border-radius: 2px;
+      padding: 9px 18px; border-radius: 2px;
       cursor: pointer; transition: border-color 0.2s, color 0.2s;
-      pointer-events: all;
     }
-    #restart-btn:hover, #restart-btn:active {
+    .overlay-btn:hover, .overlay-btn:active {
       border-color: rgba(255,255,255,0.6); color: #fff;
+    }
+    #advance-btn {
+      border-color: rgba(0,200,232,0.4); color: #00c8e8;
+    }
+    #advance-btn:hover, #advance-btn:active {
+      border-color: #00c8e8; color: #fff; background: rgba(0,200,232,0.1);
+    }
+    #reset-btn {
+      border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.28);
+    }
+    #reset-btn:hover, #reset-btn:active {
+      border-color: rgba(255,255,255,0.4); color: rgba(255,255,255,0.6);
     }
 
     /* ── Touch controls ─────────────────────────────────────────────── */
@@ -342,6 +377,7 @@
   <!-- HUD (non-interactive passthrough layer) -->
   <div id="hud">
     <div id="logo">INTEGRITY <span class="accent">MARKET</span></div>
+    <div id="contract-rank"></div>
 
     <div id="alert-bar" data-level="0">
       <span id="alert-label">CLEAR</span>
@@ -412,7 +448,14 @@
   <div id="overlay" class="hidden">
     <div id="overlay-title"></div>
     <div id="overlay-sub"></div>
-    <button id="restart-btn">RESTART MISSION</button>
+    <div id="overlay-next" class="hidden">
+      <div id="overlay-next-rank"></div>
+      <div id="overlay-next-terms"></div>
+    </div>
+    <div class="overlay-btns">
+      <button id="advance-btn" class="overlay-btn">NEXT CONTRACT</button>
+      <button id="reset-btn"   class="overlay-btn">RESET AGENCY</button>
+    </div>
   </div>
 
   <!-- Touch controls (interactive, outside pointer-events:none HUD) -->

@@ -137,6 +137,13 @@ export class Player {
     this._isMoving = false; // reset each frame; move() sets it back if active
   }
 
+  reset() {
+    this._group.position.set(0, 0, 0);
+    this._group.rotation.y = 0;
+    this._bobTime  = 0;
+    this._isMoving = false;
+  }
+
   /** World-space position of the character root. */
   getPosition() {
     return this._group.position;

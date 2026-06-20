@@ -1,9 +1,8 @@
 /**
- * main.js — Integrity Market, Phase 3: The Economy
+ * main.js — Integrity Market, Phase 4: The Loop
  *
- * Adds: multiple contradiction types, harvest-moment card (said-vs-did),
- * live Integrity Market panel with price-crash-on-flood mechanic, and
- * an itemised sell sequence at the exit.
+ * Adds: ContractManager (tier escalation), in-place run reset,
+ * NEXT CONTRACT / RETRY CONTRACT overlay flow, contract rank HUD.
  */
 
 import * as THREE from 'three';
@@ -18,6 +17,7 @@ import { Market           } from './Market.js';
 import { HarvestModal     } from './HarvestModal.js';
 import { SellPanel        } from './SellPanel.js';
 import { CType, CONTRADICTIONS } from './Contradiction.js';
+import { ContractManager  } from './ContractManager.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +68,7 @@ const player    = new Player(scene);
 const input     = new InputManager();
 const gameState = new GameState();
 const market    = new Market();
+const contract  = new ContractManager();
 
 isoCamera.snapTo(player.getPosition());
 
@@ -75,27 +76,34 @@ isoCamera.snapTo(player.getPosition());
 
 const V = (x, z) => new THREE.Vector3(x, 0, z);
 
+const { guardSpeed, suspicionRate } = contract.currentTier;
+
 const guards = [
-  new Guard(scene, { color: 0x3a4f6a, waypoints: [V(-14, 10), V(10, 10), V(10, 17), V(-14, 17)] }),
-  new Guard(scene, { color: 0x2e3e30, waypoints: [V(-14, -16), V(-7, -16), V(-7, -4), V(-14, -4)] }),
+  new Guard(scene, {
+    color: 0x3a4f6a,
+    waypoints: [V(-14, 10), V(10, 10), V(10, 17), V(-14, 17)],
+    speedMult: guardSpeed, suspicionMult: suspicionRate,
+  }),
+  new Guard(scene, {
+    color: 0x2e3e30,
+    waypoints: [V(-14, -16), V(-7, -16), V(-7, -4), V(-14, -4)],
+    speedMult: guardSpeed, suspicionMult: suspicionRate,
+  }),
 ];
 
 // ── Dossiers ──────────────────────────────────────────────────────────────────
-// Two HOUSING dossiers so the player sees the price crash within one run.
-// CLIMATE in the central north (moderate risk).
-// DONATIONS in the NE secure room (highest value, deepest in map).
 
 const dossiers = [
-  new Dossier(scene, new THREE.Vector3(-2,  1.88, 5.5),  CType.HOUSING),   // reception desk
-  new Dossier(scene, new THREE.Vector3(-12, 1.52, 8),    CType.HOUSING),   // SW desk (guard patrol zone)
-  new Dossier(scene, new THREE.Vector3(3,   0.77, -5),   CType.CLIMATE),   // central atrium table
-  new Dossier(scene, new THREE.Vector3(14,  3.0,  -12),  CType.DONATIONS), // NE server rack
+  new Dossier(scene, new THREE.Vector3(-2,  1.88, 5.5),  CType.HOUSING),
+  new Dossier(scene, new THREE.Vector3(-12, 1.52, 8),    CType.HOUSING),
+  new Dossier(scene, new THREE.Vector3(3,   0.77, -5),   CType.CLIMATE),
+  new Dossier(scene, new THREE.Vector3(14,  3.0,  -12),  CType.DONATIONS),
 ];
 
 // ── Exit zone ─────────────────────────────────────────────────────────────────
 
-const EXIT_RADIUS  = 2.5;
-const EXIT_POS     = new THREE.Vector3(0, 0, 18);
+const EXIT_RADIUS = 2.5;
+const EXIT_POS    = new THREE.Vector3(0, 0, 18);
 
 const exitDiscMat = new THREE.MeshBasicMaterial({
   color: 0x00ff88, transparent: true, opacity: 0.10,
@@ -119,26 +127,33 @@ scene.add(exitRing);
 
 const harvestModal = new HarvestModal();
 const sellPanel    = new SellPanel();
-
-// Dossiers collected this run (typeIds in collection order)
-const inventory = [];
+const inventory    = [];
 
 // ── HUD element refs ──────────────────────────────────────────────────────────
 
-const elHint       = document.getElementById('hint');
-const elAlertLabel = document.getElementById('alert-label');
-const elAlertBar   = document.getElementById('alert-bar');
-const elHarvestBtn = document.getElementById('harvest-btn');
-const elOverlay    = document.getElementById('overlay');
-const elOvTitle    = document.getElementById('overlay-title');
-const elOvSub      = document.getElementById('overlay-sub');
-const elRestartBtn = document.getElementById('restart-btn');
-const elInvChips   = document.getElementById('inv-chips');
-const elMarketRows = document.getElementById('market-rows');
-const elMpBalance  = document.getElementById('market-balance-value');
+const elHint         = document.getElementById('hint');
+const elAlertLabel   = document.getElementById('alert-label');
+const elAlertBar     = document.getElementById('alert-bar');
+const elHarvestBtn   = document.getElementById('harvest-btn');
+const elOverlay      = document.getElementById('overlay');
+const elOvTitle      = document.getElementById('overlay-title');
+const elOvSub        = document.getElementById('overlay-sub');
+const elOvNext       = document.getElementById('overlay-next');
+const elOvNextRank   = document.getElementById('overlay-next-rank');
+const elOvNextTerms  = document.getElementById('overlay-next-terms');
+const elAdvanceBtn   = document.getElementById('advance-btn');
+const elResetBtn     = document.getElementById('reset-btn');
+const elInvChips     = document.getElementById('inv-chips');
+const elMarketRows   = document.getElementById('market-rows');
+const elMpBalance    = document.getElementById('market-balance-value');
+const elContractRank = document.getElementById('contract-rank');
 
 elHarvestBtn?.addEventListener('pointerdown', e => { e.preventDefault(); input.flagInteract(); });
-elRestartBtn?.addEventListener('click', () => location.reload());
+
+elResetBtn?.addEventListener('click', () => {
+  sessionStorage.clear();
+  location.reload();
+});
 
 // ── Market panel render ───────────────────────────────────────────────────────
 
@@ -169,6 +184,16 @@ function renderInventory() {
   }).join('');
 }
 
+// ── Contract HUD ──────────────────────────────────────────────────────────────
+
+function updateContractHUD() {
+  if (elContractRank) {
+    elContractRank.textContent =
+      `${contract.currentTier.rank} · RUN ${contract.run + 1}`;
+  }
+}
+updateContractHUD();
+
 // ── Alert HUD ─────────────────────────────────────────────────────────────────
 
 const ALERT_LABELS = ['CLEAR', 'EYES ON', 'HIGH ALERT', 'CAUGHT'];
@@ -179,8 +204,41 @@ function updateAlertHUD() {
   const al = gameState.alertLevel;
   if (al === prevAlertLevel) return;
   prevAlertLevel = al;
-  if (elAlertLabel) { elAlertLabel.textContent = ALERT_LABELS[al]; elAlertLabel.style.color = ALERT_COLORS[al]; }
+  if (elAlertLabel) {
+    elAlertLabel.textContent = ALERT_LABELS[al];
+    elAlertLabel.style.color = ALERT_COLORS[al];
+  }
   if (elAlertBar) elAlertBar.dataset.level = al;
+}
+
+// ── Run reset (in-place — no page reload) ────────────────────────────────────
+
+function resetRun(advance) {
+  if (advance) contract.advance();
+
+  const tier = contract.currentTier;
+  for (const g of guards) g.setMultipliers(tier.guardSpeed, tier.suspicionRate);
+
+  gameState.reset();
+  player.reset();
+  for (const g of guards) g.reset();
+  for (const d of dossiers) d.reset();
+
+  inventory.length = 0;
+  missionDone      = false;
+  hintVisible      = true;
+  hintTimer        = 0;
+  exitPulse        = 0;
+  prevAlertLevel   = -1;
+
+  renderInventory();
+  renderMarketPanel();
+  updateContractHUD();
+  updateAlertHUD();
+
+  elHint?.classList.remove('hidden');
+  elOverlay?.classList.add('hidden');
+  isoCamera.snapTo(player.getPosition());
 }
 
 // ── Exit / completion flow ────────────────────────────────────────────────────
@@ -198,18 +256,47 @@ function triggerExit() {
 }
 
 function showEndOverlay(reason) {
-  if (elOverlay)  elOverlay.classList.remove('hidden');
+  if (elOverlay) elOverlay.classList.remove('hidden');
+
   if (reason === 'sold') {
     if (elOvTitle) elOvTitle.textContent = 'TRANSACTION COMPLETE';
-    if (elOvSub)   elOvSub.textContent   = `$${market.balance.toLocaleString()} deposited. The market is pleased.`;
-  } else if (reason === 'caught') {
-    if (elOvTitle) elOvTitle.textContent = 'IDENTIFIED';
-    if (elOvSub)   elOvSub.textContent   = 'Contract restructuring in progress…';
+    if (elOvSub)   elOvSub.textContent   =
+      `$${market.balance.toLocaleString()} deposited. The market is pleased.`;
+
+    if (elOvNext) {
+      elOvNext.classList.remove('hidden');
+      if (contract.atMaxTier) {
+        if (elOvNextRank)  elOvNextRank.textContent  = 'SENIOR CONTRACTOR — MAX TIER';
+        if (elOvNextTerms) elOvNextTerms.textContent = 'Contract terms unchanged.';
+      } else {
+        const next = contract.nextTier;
+        const dSpd = Math.round((next.guardSpeed  - 1) * 100);
+        const dSus = Math.round((next.suspicionRate - 1) * 100);
+        if (elOvNextRank)  elOvNextRank.textContent  = next.rank;
+        if (elOvNextTerms) elOvNextTerms.textContent =
+          `Guards +${dSpd}% faster · Suspicion +${dSus}% faster`;
+      }
+    }
+
+    if (elAdvanceBtn) elAdvanceBtn.textContent = 'NEXT CONTRACT';
+    elAdvanceBtn?.addEventListener('click', _onAdvance, { once: true });
+
   } else {
-    if (elOvTitle) elOvTitle.textContent = 'MISSION ABANDONED';
-    if (elOvSub)   elOvSub.textContent   = 'No data acquired. The agency is disappointed.';
+    if (elOvTitle) elOvTitle.textContent =
+      reason === 'caught' ? 'IDENTIFIED' : 'MISSION ABANDONED';
+    if (elOvSub) elOvSub.textContent =
+      reason === 'caught'
+        ? 'Contract restructuring in progress…'
+        : 'No data acquired. The agency is disappointed.';
+
+    if (elOvNext) elOvNext.classList.add('hidden');
+    if (elAdvanceBtn) elAdvanceBtn.textContent = 'RETRY CONTRACT';
+    elAdvanceBtn?.addEventListener('click', _onRetry, { once: true });
   }
 }
+
+function _onAdvance() { resetRun(true);  }
+function _onRetry()   { resetRun(false); }
 
 // ── Resize ────────────────────────────────────────────────────────────────────
 
@@ -220,11 +307,10 @@ window.addEventListener('resize', () => {
 
 // ── Game loop ─────────────────────────────────────────────────────────────────
 
-let hintVisible = true;
-let hintTimer   = 0;
-let exitPulse   = 0;
-let missionDone = false;
-
+let hintVisible   = true;
+let hintTimer     = 0;
+let exitPulse     = 0;
+let missionDone   = false;
 let lastTimestamp = performance.now();
 
 function loop(timestamp) {
@@ -249,7 +335,7 @@ function loop(timestamp) {
   }
   player.update(dt);
 
-  // ── Guards (freeze while harvest card is showing) ──
+  // ── Guards (freeze while harvest card is open) ──
   let maxSuspicion = 0;
   for (const g of guards) {
     const s = g.update(dt, player.getPosition(), active && !harvestModal.isOpen);
@@ -280,7 +366,7 @@ function loop(timestamp) {
     triggerExit();
   }
 
-  // Pulse exit glow when carrying dossiers
+  // Pulse exit disc when carrying dossiers
   exitPulse += dt;
   exitDiscMat.opacity = inventory.length > 0
     ? 0.10 + Math.sin(exitPulse * 3) * 0.05

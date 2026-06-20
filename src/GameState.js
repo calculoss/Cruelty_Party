@@ -42,6 +42,12 @@ export class GameState {
     }
   }
 
+  reset() {
+    this.alertLevel   = AlertLevel.CLEAR;
+    this._caught      = false;
+    this._caughtTimer = 0;
+  }
+
   get isPlaying() { return !this._caught; }
   get isCaught()  { return this._caught;  }
 }

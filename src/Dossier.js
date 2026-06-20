@@ -81,6 +81,12 @@ export class Dossier {
     this._group.visible = false;
   }
 
+  reset() {
+    this._collected     = false;
+    this._animTime      = 0;
+    this._group.visible = true;
+  }
+
   get collected()  { return this._collected; }
   get position()   { return this._pos; }
 }
