@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>INTEGRITY MARKET</title>
   <style>
-    /* ── Reset ──────────────────────────────────────────────── */
+    /* ── Reset ──────────────────────────────────────────────────────── */
     *, *::before, *::after {
       margin: 0; padding: 0; box-sizing: border-box;
       -webkit-tap-highlight-color: transparent;
@@ -23,17 +23,12 @@
     }
     #app canvas { display: block; width: 100vw !important; height: 100vh !important; }
 
-    /* ── Utility ────────────────────────────────────────────── */
+    /* ── Utility ────────────────────────────────────────────────────── */
     .hidden { opacity: 0 !important; pointer-events: none !important; }
 
-    /* ── HUD ─────────────────────────────────────────────────── */
+    /* ── HUD (pointer-events:none wrapper) ──────────────────────────── */
     #hud {
       position: fixed; inset: 0; pointer-events: none;
-      padding:
-        max(16px, env(safe-area-inset-top))
-        max(20px, env(safe-area-inset-right))
-        max(16px, env(safe-area-inset-bottom))
-        max(20px, env(safe-area-inset-left));
     }
 
     #logo {
@@ -45,79 +40,239 @@
     }
     #logo .accent { color: #00c8e8; }
 
-    /* Alert bar — top-right */
+    /* Alert bar — top-left, below logo */
     #alert-bar {
       position: absolute;
-      top: max(14px, env(safe-area-inset-top));
-      right: max(18px, env(safe-area-inset-right));
+      top: max(44px, calc(env(safe-area-inset-top) + 28px));
+      left: max(22px, env(safe-area-inset-left));
       display: flex; align-items: center; gap: 8px;
       transition: opacity 0.3s;
     }
     #alert-label {
       font-size: 10px; letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: #00c8e8;
+      text-transform: uppercase; color: #00c8e8;
       transition: color 0.4s;
     }
-    /* Pip row — three small squares that fill with alert colour */
-    #pip-row {
-      display: flex; gap: 3px;
-    }
+    #pip-row { display: flex; gap: 3px; }
     .pip {
       width: 6px; height: 6px; border-radius: 1px;
       background: rgba(255,255,255,0.12);
       transition: background 0.3s;
     }
-    /* Fill pips based on data-level on #alert-bar */
-    #alert-bar[data-level="1"] .pip:nth-child(1)                { background: #ffcc00; }
+    #alert-bar[data-level="1"] .pip:nth-child(1)               { background: #ffcc00; }
     #alert-bar[data-level="2"] .pip:nth-child(1),
-    #alert-bar[data-level="2"] .pip:nth-child(2)                { background: #ff6600; }
+    #alert-bar[data-level="2"] .pip:nth-child(2)               { background: #ff6600; }
     #alert-bar[data-level="3"] .pip:nth-child(1),
     #alert-bar[data-level="3"] .pip:nth-child(2),
-    #alert-bar[data-level="3"] .pip:nth-child(3)                { background: #ff1111; }
+    #alert-bar[data-level="3"] .pip:nth-child(3)               { background: #ff1111; }
 
-    /* Dossier status — bottom-centre above joystick zone */
-    #dossier-status {
-      position: absolute;
-      bottom: max(180px, calc(env(safe-area-inset-bottom) + 180px));
-      left: 50%; transform: translateX(-50%);
-      font-size: 10px; letter-spacing: 0.22em;
-      text-transform: uppercase; white-space: nowrap;
-      color: #00c8e8;
-      border: 1px solid rgba(0,200,232,0.35);
-      padding: 4px 10px; border-radius: 2px;
-      background: rgba(0,200,232,0.06);
-      opacity: 1; transition: opacity 0.4s;
-    }
-
-    /* Interact prompt — floats in-screen, centre */
-    #interact-prompt {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, calc(-50% + 60px));
-      font-size: 10px; letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.55);
-      opacity: 1; transition: opacity 0.2s;
-    }
-
-    /* Move hint */
+    /* Move hint — bottom-centre above joystick */
     #hint {
       position: absolute;
-      bottom: max(165px, calc(env(safe-area-inset-bottom) + 165px));
+      bottom: max(175px, calc(env(safe-area-inset-bottom) + 175px));
       left: 50%; transform: translateX(-50%);
       font-size: 10px; letter-spacing: 0.18em;
       color: rgba(255,255,255,0.22); text-transform: uppercase;
       white-space: nowrap; transition: opacity 1s ease;
     }
 
-    /* ── End-state overlay ───────────────────────────────────── */
+    /* ── Inventory chips ────────────────────────────────────────────── */
+    #inv-chips {
+      position: fixed;
+      bottom: max(198px, calc(env(safe-area-inset-bottom) + 198px));
+      left: 50%; transform: translateX(-50%);
+      display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+      pointer-events: none;
+      min-height: 22px;
+    }
+    .inv-chip {
+      font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase;
+      border: 1px solid; padding: 3px 7px; border-radius: 2px;
+      background: rgba(0,0,0,0.5);
+    }
+
+    /* ── Market panel (right sidebar) ──────────────────────────────── */
+    #market-panel {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top));
+      right: max(14px, env(safe-area-inset-right));
+      width: 168px;
+      background: rgba(10,12,14,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 3px;
+      padding: 11px 13px 12px;
+      pointer-events: none;
+    }
+    #mp-header {
+      font-size: 8px; letter-spacing: 0.28em;
+      text-transform: uppercase; color: rgba(255,255,255,0.22);
+      margin-bottom: 11px;
+    }
+    .mp-row {
+      display: flex; align-items: center; gap: 7px; margin-bottom: 8px;
+    }
+    .mp-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    }
+    .mp-label {
+      font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: rgba(255,255,255,0.42); flex: 1; line-height: 1.2;
+    }
+    .mp-price {
+      font-size: 9px; letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.68); white-space: nowrap;
+    }
+    .mp-price.fatigued { color: #ff6644; }
+    .mp-trend {
+      font-size: 7px; letter-spacing: 0.04em; color: #ff6644; margin-left: 2px;
+    }
+    #mp-divider {
+      border: none; border-top: 1px solid rgba(255,255,255,0.07); margin: 8px 0;
+    }
+    #mp-balance-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+    }
+    #mp-balance-label {
+      font-size: 8px; letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(255,255,255,0.22);
+    }
+    #market-balance-value {
+      font-size: 11px; letter-spacing: 0.05em; color: #00c8e8;
+    }
+
+    /* ── Harvest modal ──────────────────────────────────────────────── */
+    #harvest-modal {
+      position: fixed; inset: 0;
+      background: rgba(8,10,12,0.88);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #harvest-card {
+      width: min(390px, 90vw);
+      background: #12161a;
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 4px;
+      padding: 28px 26px 22px;
+      opacity: 0; transform: translateY(14px) scale(0.97);
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+    #harvest-card.visible {
+      opacity: 1; transform: translateY(0) scale(1);
+    }
+    #harvest-type {
+      font-size: 9px; letter-spacing: 0.38em;
+      text-transform: uppercase; margin-bottom: 18px;
+    }
+    .harvest-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 2px; padding: 11px 13px;
+    }
+    .harvest-block-label {
+      font-size: 7px; letter-spacing: 0.3em; text-transform: uppercase;
+      color: rgba(255,255,255,0.22); margin-bottom: 6px;
+    }
+    .harvest-block-quote {
+      font-size: 12px; line-height: 1.6;
+      color: rgba(255,255,255,0.72);
+    }
+    .harvest-vs {
+      text-align: center; font-size: 8px; letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.18); padding: 9px 0;
+    }
+    #harvest-footer {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-top: 18px;
+    }
+    #harvest-value {
+      font-size: 20px; letter-spacing: 0.04em; color: #00c8e8;
+    }
+    #harvest-secure {
+      font-family: inherit; font-size: 8px; letter-spacing: 0.25em;
+      text-transform: uppercase;
+      background: rgba(0,200,232,0.1);
+      border: 1px solid rgba(0,200,232,0.38);
+      color: #00c8e8; padding: 10px 16px; border-radius: 2px;
+      cursor: pointer; transition: background 0.15s;
+      touch-action: manipulation;
+    }
+    #harvest-secure:active { background: rgba(0,200,232,0.22); }
+
+    /* ── Sell panel ─────────────────────────────────────────────────── */
+    #sell-panel {
+      position: fixed; inset: 0;
+      background: rgba(8,10,12,0.92);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #sell-card {
+      width: min(400px, 90vw);
+      background: #12161a;
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 4px;
+      padding: 26px 24px 22px;
+    }
+    #sell-header {
+      font-size: 8px; letter-spacing: 0.35em; text-transform: uppercase;
+      color: rgba(255,255,255,0.25); margin-bottom: 16px;
+    }
+    #sell-items { margin-bottom: 14px; }
+    .sell-row {
+      display: flex; align-items: flex-start; gap: 9px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .sell-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      flex-shrink: 0; margin-top: 3px;
+    }
+    .sell-label {
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.52); flex: 1; line-height: 1.4;
+    }
+    .sell-amount {
+      font-size: 11px; letter-spacing: 0.05em;
+      color: rgba(255,255,255,0.72); white-space: nowrap; text-align: right;
+    }
+    .sell-amount.fatigued { color: #ff6644; }
+    .fatigue-tag {
+      display: block; font-size: 7px; letter-spacing: 0.12em;
+      text-transform: uppercase; color: #ff6644; margin-top: 2px;
+    }
+    #sell-totals { padding-top: 12px; }
+    .sell-total-row {
+      display: flex; justify-content: space-between;
+      align-items: baseline; margin-bottom: 6px;
+    }
+    .sell-total-label {
+      font-size: 8px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(255,255,255,0.22);
+    }
+    #sell-run-total {
+      font-size: 16px; letter-spacing: 0.05em; color: #00c8e8;
+    }
+    #sell-session-balance {
+      font-size: 11px; letter-spacing: 0.05em; color: rgba(255,255,255,0.42);
+    }
+    #sell-continue {
+      margin-top: 18px; width: 100%;
+      font-family: inherit; font-size: 9px; letter-spacing: 0.28em;
+      text-transform: uppercase;
+      background: rgba(0,200,232,0.08);
+      border: 1px solid rgba(0,200,232,0.32);
+      color: #00c8e8; padding: 12px; border-radius: 2px;
+      cursor: pointer; transition: background 0.15s;
+      touch-action: manipulation;
+    }
+    #sell-continue:active { background: rgba(0,200,232,0.2); }
+
+    /* ── End-state overlay ──────────────────────────────────────────── */
     #overlay {
       position: fixed; inset: 0;
-      background: rgba(10,12,14,0.85);
+      background: rgba(10,12,14,0.88);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 14px;
+      gap: 14px; z-index: 30;
       opacity: 1; transition: opacity 0.5s;
     }
     #overlay-title {
@@ -125,25 +280,25 @@
       text-transform: uppercase; color: #fff;
     }
     #overlay-sub {
-      font-size: 11px; letter-spacing: 0.18em;
-      text-transform: uppercase; color: rgba(255,255,255,0.4);
+      font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(255,255,255,0.38);
+      max-width: 340px; text-align: center; line-height: 1.6;
     }
     #restart-btn {
       margin-top: 20px;
       font-family: inherit; font-size: 10px; letter-spacing: 0.22em;
-      text-transform: uppercase;
-      background: transparent;
-      border: 1px solid rgba(255,255,255,0.25);
-      color: rgba(255,255,255,0.5);
-      padding: 8px 20px; border-radius: 2px;
+      text-transform: uppercase; background: transparent;
+      border: 1px solid rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.45);
+      padding: 9px 22px; border-radius: 2px;
       cursor: pointer; transition: border-color 0.2s, color 0.2s;
+      pointer-events: all;
     }
     #restart-btn:hover, #restart-btn:active {
-      border-color: rgba(255,255,255,0.6);
-      color: #fff;
+      border-color: rgba(255,255,255,0.6); color: #fff;
     }
 
-    /* ── Touch controls ─────────────────────────────────────── */
+    /* ── Touch controls ─────────────────────────────────────────────── */
     #joystick-zone {
       position: fixed;
       bottom: max(44px, env(safe-area-inset-bottom));
@@ -184,7 +339,7 @@
 <body>
   <div id="app"></div>
 
-  <!-- HUD (non-interactive layer) -->
+  <!-- HUD (non-interactive passthrough layer) -->
   <div id="hud">
     <div id="logo">INTEGRITY <span class="accent">MARKET</span></div>
 
@@ -197,9 +352,60 @@
       </div>
     </div>
 
-    <div id="dossier-status" class="hidden">▪ DOSSIER SECURED</div>
-    <div id="interact-prompt" class="hidden">[ E ] HARVEST</div>
     <div id="hint">WASD / arrows — or use the joystick</div>
+  </div>
+
+  <!-- Inventory chips (bottom-centre, above joystick) -->
+  <div id="inv-chips"></div>
+
+  <!-- Market panel (right sidebar) -->
+  <div id="market-panel">
+    <div id="mp-header">Integrity Market</div>
+    <div id="market-rows"></div>
+    <hr id="mp-divider" />
+    <div id="mp-balance-row">
+      <span id="mp-balance-label">Balance</span>
+      <span id="market-balance-value">$0</span>
+    </div>
+  </div>
+
+  <!-- Harvest modal -->
+  <div id="harvest-modal" class="hidden">
+    <div id="harvest-card">
+      <div id="harvest-type"></div>
+      <div class="harvest-block">
+        <div class="harvest-block-label">Said</div>
+        <div id="harvest-said" class="harvest-block-quote"></div>
+      </div>
+      <div class="harvest-vs">— vs —</div>
+      <div class="harvest-block">
+        <div class="harvest-block-label">Did</div>
+        <div id="harvest-did" class="harvest-block-quote"></div>
+      </div>
+      <div id="harvest-footer">
+        <div id="harvest-value"></div>
+        <button id="harvest-secure">SECURE DOSSIER</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sell panel -->
+  <div id="sell-panel" class="hidden">
+    <div id="sell-card">
+      <div id="sell-header">Transaction Summary</div>
+      <div id="sell-items"></div>
+      <div id="sell-totals">
+        <div class="sell-total-row">
+          <span class="sell-total-label">This run</span>
+          <span id="sell-run-total">$0</span>
+        </div>
+        <div class="sell-total-row">
+          <span class="sell-total-label">Session balance</span>
+          <span id="sell-session-balance">$0</span>
+        </div>
+      </div>
+      <button id="sell-continue">CONTINUE</button>
+    </div>
   </div>
 
   <!-- End-state overlay -->
@@ -209,7 +415,7 @@
     <button id="restart-btn">RESTART MISSION</button>
   </div>
 
-  <!-- Touch controls (interactive, outside HUD) -->
+  <!-- Touch controls (interactive, outside pointer-events:none HUD) -->
   <div id="joystick-zone"><div id="joystick-handle"></div></div>
   <div id="harvest-btn" class="hidden">HARVEST</div>
 
