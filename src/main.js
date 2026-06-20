@@ -1,8 +1,9 @@
 /**
- * main.js — Integrity Market, Phase 2: Stealth Core
+ * main.js — Integrity Market, Phase 3: The Economy
  *
- * Adds: guards with patrol routes + vision cones, alert state,
- * one interactable dossier, and win/lose conditions.
+ * Adds: multiple contradiction types, harvest-moment card (said-vs-did),
+ * live Integrity Market panel with price-crash-on-flood mechanic, and
+ * an itemised sell sequence at the exit.
  */
 
 import * as THREE from 'three';
@@ -12,23 +13,26 @@ import { Player           } from './Player.js';
 import { InputManager     } from './InputManager.js';
 import { Guard            } from './Guard.js';
 import { Dossier          } from './Dossier.js';
-import { GameState, AlertLevel, MissionState } from './GameState.js';
+import { GameState, AlertLevel } from './GameState.js';
+import { Market           } from './Market.js';
+import { HarvestModal     } from './HarvestModal.js';
+import { SellPanel        } from './SellPanel.js';
+import { CType, CONTRADICTIONS } from './Contradiction.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
 const container = document.getElementById('app');
-
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer  = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled      = true;
-renderer.shadowMap.type         = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled   = true;
+renderer.shadowMap.type      = THREE.PCFSoftShadowMap;
 renderer.setClearColor(0x0e1012);
-renderer.toneMapping            = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure    = 1.1;
+renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
 container.appendChild(renderer.domElement);
 
-// ── Scene + fog ───────────────────────────────────────────────────────────────
+// ── Scene ─────────────────────────────────────────────────────────────────────
 
 const scene = new THREE.Scene();
 scene.fog   = new THREE.Fog(0x0e1012, 40, 90);
@@ -41,8 +45,8 @@ const key = new THREE.DirectionalLight(0xfff2d9, 1.15);
 key.position.set(25, 40, 20);
 key.castShadow           = true;
 key.shadow.mapSize.width = key.shadow.mapSize.height = 2048;
-key.shadow.camera.near   = 5;  key.shadow.camera.far    = 120;
-key.shadow.camera.left   = -32; key.shadow.camera.right  =  32;
+key.shadow.camera.near   = 5;   key.shadow.camera.far    = 120;
+key.shadow.camera.left   = -32; key.shadow.camera.right  = 32;
 key.shadow.camera.top    =  32; key.shadow.camera.bottom = -32;
 key.shadow.bias          = -0.0008;
 key.shadow.normalBias    =  0.04;
@@ -56,133 +60,154 @@ const rim = new THREE.DirectionalLight(0x8899aa, 0.12);
 rim.position.set(0, 5, -30);
 scene.add(rim);
 
-// ── Core world objects ────────────────────────────────────────────────────────
+// ── World ─────────────────────────────────────────────────────────────────────
 
 const isoCamera = new IsometricCamera();
 const level     = new Level(scene);
 const player    = new Player(scene);
 const input     = new InputManager();
 const gameState = new GameState();
+const market    = new Market();
 
 isoCamera.snapTo(player.getPosition());
 
 // ── Guards ────────────────────────────────────────────────────────────────────
-// Guard 1 — "Security", patrols south open-plan (blue-grey uniform)
-// Guard 2 — "Compliance", patrols north-west wing (darker uniform)
 
 const V = (x, z) => new THREE.Vector3(x, 0, z);
 
 const guards = [
-  new Guard(scene, {
-    color: 0x3a4f6a,
-    waypoints: [V(-14, 10), V(10, 10), V(10, 17), V(-14, 17)],
-  }),
-  new Guard(scene, {
-    color: 0x2e3e30,
-    waypoints: [V(-14, -16), V(-7, -16), V(-7, -4), V(-14, -4)],
-  }),
+  new Guard(scene, { color: 0x3a4f6a, waypoints: [V(-14, 10), V(10, 10), V(10, 17), V(-14, 17)] }),
+  new Guard(scene, { color: 0x2e3e30, waypoints: [V(-14, -16), V(-7, -16), V(-7, -4), V(-14, -4)] }),
 ];
 
-// ── Dossier ───────────────────────────────────────────────────────────────────
-// Placed on the server rack in the NE secure room (x=14, z=−12).
+// ── Dossiers ──────────────────────────────────────────────────────────────────
+// Two HOUSING dossiers so the player sees the price crash within one run.
+// CLIMATE in the central north (moderate risk).
+// DONATIONS in the NE secure room (highest value, deepest in map).
 
-const dossier = new Dossier(
-  scene,
-  new THREE.Vector3(14, 2, -12),
-  'MINISTER CONTRADICTIONS VOL.1'
-);
+const dossiers = [
+  new Dossier(scene, new THREE.Vector3(-2,  1.88, 5.5),  CType.HOUSING),   // reception desk
+  new Dossier(scene, new THREE.Vector3(-12, 1.52, 8),    CType.HOUSING),   // SW desk (guard patrol zone)
+  new Dossier(scene, new THREE.Vector3(3,   0.77, -5),   CType.CLIMATE),   // central atrium table
+  new Dossier(scene, new THREE.Vector3(14,  3.0,  -12),  CType.DONATIONS), // NE server rack
+];
 
 // ── Exit zone ─────────────────────────────────────────────────────────────────
-// Glowing green zone near the south entrance (z=18, x=0).
 
-const EXIT_RADIUS = 2.5;
+const EXIT_RADIUS  = 2.5;
+const EXIT_POS     = new THREE.Vector3(0, 0, 18);
 
-const exitMat = new THREE.MeshBasicMaterial({
-  color: 0x00ff88, transparent: true, opacity: 0.13,
+const exitDiscMat = new THREE.MeshBasicMaterial({
+  color: 0x00ff88, transparent: true, opacity: 0.10,
   side: THREE.DoubleSide, depthWrite: false,
 });
-const exitDisc = new THREE.Mesh(new THREE.CircleGeometry(EXIT_RADIUS, 32), exitMat);
+const exitDisc = new THREE.Mesh(new THREE.CircleGeometry(EXIT_RADIUS, 32), exitDiscMat);
 exitDisc.rotation.x = -Math.PI / 2;
-exitDisc.position.set(0, 0.04, 18);
+exitDisc.position.set(EXIT_POS.x, 0.04, EXIT_POS.z);
 scene.add(exitDisc);
 
-// Ring border
 const exitRingMat = new THREE.MeshBasicMaterial({
-  color: 0x00ff88, transparent: true, opacity: 0.4,
+  color: 0x00ff88, transparent: true, opacity: 0.45,
   side: THREE.DoubleSide, depthWrite: false,
 });
-const exitRing = new THREE.Mesh(
-  new THREE.RingGeometry(EXIT_RADIUS - 0.08, EXIT_RADIUS, 32),
-  exitRingMat,
-);
+const exitRing = new THREE.Mesh(new THREE.RingGeometry(EXIT_RADIUS - 0.08, EXIT_RADIUS, 32), exitRingMat);
 exitRing.rotation.x = -Math.PI / 2;
-exitRing.position.set(0, 0.05, 18);
+exitRing.position.set(EXIT_POS.x, 0.05, EXIT_POS.z);
 scene.add(exitRing);
 
-const EXIT_POS = new THREE.Vector3(0, 0, 18);
+// ── Economy controllers ───────────────────────────────────────────────────────
 
-// ── HUD elements ──────────────────────────────────────────────────────────────
+const harvestModal = new HarvestModal();
+const sellPanel    = new SellPanel();
+
+// Dossiers collected this run (typeIds in collection order)
+const inventory = [];
+
+// ── HUD element refs ──────────────────────────────────────────────────────────
 
 const elHint       = document.getElementById('hint');
 const elAlertLabel = document.getElementById('alert-label');
 const elAlertBar   = document.getElementById('alert-bar');
-const elDossierHUD = document.getElementById('dossier-status');
-const elPrompt     = document.getElementById('interact-prompt');
 const elHarvestBtn = document.getElementById('harvest-btn');
 const elOverlay    = document.getElementById('overlay');
-const elOverlayTitle = document.getElementById('overlay-title');
-const elOverlaySub   = document.getElementById('overlay-sub');
-const elRestartBtn   = document.getElementById('restart-btn');
+const elOvTitle    = document.getElementById('overlay-title');
+const elOvSub      = document.getElementById('overlay-sub');
+const elRestartBtn = document.getElementById('restart-btn');
+const elInvChips   = document.getElementById('inv-chips');
+const elMarketRows = document.getElementById('market-rows');
+const elMpBalance  = document.getElementById('market-balance-value');
 
-// Wire the on-screen harvest button to the input manager
-elHarvestBtn?.addEventListener('pointerdown', e => {
-  e.preventDefault();
-  input.flagInteract();
-});
-
+elHarvestBtn?.addEventListener('pointerdown', e => { e.preventDefault(); input.flagInteract(); });
 elRestartBtn?.addEventListener('click', () => location.reload());
 
-// ── HUD update ────────────────────────────────────────────────────────────────
+// ── Market panel render ───────────────────────────────────────────────────────
+
+function renderMarketPanel() {
+  if (!elMarketRows) return;
+  elMarketRows.innerHTML = market.getAllPrices().map(p => {
+    const hex  = `#${p.color.toString(16).padStart(6, '0')}`;
+    const pct  = Math.round((p.price / p.basePrice) * 100);
+    const drop = p.sells > 0 ? `<span class="mp-trend">↓${100 - pct}%</span>` : '';
+    return `<div class="mp-row">
+      <div class="mp-dot" style="background:${hex}"></div>
+      <div class="mp-label">${p.label}</div>
+      <div class="mp-price ${p.sells > 0 ? 'fatigued' : ''}">$${p.price.toLocaleString()}${drop}</div>
+    </div>`;
+  }).join('');
+  if (elMpBalance) elMpBalance.textContent = `$${market.balance.toLocaleString()}`;
+}
+renderMarketPanel();
+
+// ── Inventory chips ───────────────────────────────────────────────────────────
+
+function renderInventory() {
+  if (!elInvChips) return;
+  elInvChips.innerHTML = inventory.map(typeId => {
+    const d   = CONTRADICTIONS[typeId];
+    const hex = `#${d.color.toString(16).padStart(6, '0')}`;
+    return `<span class="inv-chip" style="border-color:${hex};color:${hex}">${d.id}</span>`;
+  }).join('');
+}
+
+// ── Alert HUD ─────────────────────────────────────────────────────────────────
 
 const ALERT_LABELS = ['CLEAR', 'EYES ON', 'HIGH ALERT', 'CAUGHT'];
 const ALERT_COLORS = ['#00c8e8', '#ffcc00', '#ff6600', '#ff1111'];
-
 let prevAlertLevel = -1;
 
-function updateHUD(canInteract, hasDoc) {
+function updateAlertHUD() {
   const al = gameState.alertLevel;
+  if (al === prevAlertLevel) return;
+  prevAlertLevel = al;
+  if (elAlertLabel) { elAlertLabel.textContent = ALERT_LABELS[al]; elAlertLabel.style.color = ALERT_COLORS[al]; }
+  if (elAlertBar) elAlertBar.dataset.level = al;
+}
 
-  // Alert bar — only update DOM on change
-  if (al !== prevAlertLevel) {
-    prevAlertLevel = al;
-    if (elAlertLabel) {
-      elAlertLabel.textContent  = ALERT_LABELS[al];
-      elAlertLabel.style.color  = ALERT_COLORS[al];
-    }
-    if (elAlertBar) {
-      elAlertBar.dataset.level = al;
-    }
+// ── Exit / completion flow ────────────────────────────────────────────────────
+
+function triggerExit() {
+  if (inventory.length > 0) {
+    const breakdown = market.sellAll([...inventory]);
+    inventory.length = 0;
+    renderInventory();
+    renderMarketPanel();
+    sellPanel.show(breakdown, market.balance).then(() => showEndOverlay('sold'));
+  } else {
+    showEndOverlay('empty');
   }
+}
 
-  // Dossier HUD
-  if (elDossierHUD) elDossierHUD.classList.toggle('hidden', !hasDoc);
-
-  // Interact prompt + harvest button
-  if (elPrompt)     elPrompt.classList.toggle('hidden',     !canInteract);
-  if (elHarvestBtn) elHarvestBtn.classList.toggle('hidden', !canInteract);
-
-  // End-state overlay
-  if (gameState.isComplete || gameState.isCaught) {
-    if (elOverlay && elOverlay.classList.contains('hidden')) {
-      elOverlay.classList.remove('hidden');
-      if (gameState.isComplete) {
-        if (elOverlayTitle) elOverlayTitle.textContent = 'DOSSIER SECURED';
-        if (elOverlaySub)   elOverlaySub.textContent   = 'The market will be pleased.';
-      } else {
-        if (elOverlayTitle) elOverlayTitle.textContent = 'IDENTIFIED';
-        if (elOverlaySub)   elOverlaySub.textContent   = 'Contract restructuring in progress…';
-      }
-    }
+function showEndOverlay(reason) {
+  if (elOverlay)  elOverlay.classList.remove('hidden');
+  if (reason === 'sold') {
+    if (elOvTitle) elOvTitle.textContent = 'TRANSACTION COMPLETE';
+    if (elOvSub)   elOvSub.textContent   = `$${market.balance.toLocaleString()} deposited. The market is pleased.`;
+  } else if (reason === 'caught') {
+    if (elOvTitle) elOvTitle.textContent = 'IDENTIFIED';
+    if (elOvSub)   elOvSub.textContent   = 'Contract restructuring in progress…';
+  } else {
+    if (elOvTitle) elOvTitle.textContent = 'MISSION ABANDONED';
+    if (elOvSub)   elOvSub.textContent   = 'No data acquired. The agency is disappointed.';
   }
 }
 
@@ -195,10 +220,10 @@ window.addEventListener('resize', () => {
 
 // ── Game loop ─────────────────────────────────────────────────────────────────
 
-let hasDossier  = false;
 let hintVisible = true;
 let hintTimer   = 0;
 let exitPulse   = 0;
+let missionDone = false;
 
 let lastTimestamp = performance.now();
 
@@ -208,59 +233,73 @@ function loop(timestamp) {
   const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
   lastTimestamp = timestamp;
 
-  const active = gameState.isPlaying;
+  const modalOpen = harvestModal.isOpen || sellPanel.isOpen;
+  const active    = gameState.isPlaying && !missionDone && !modalOpen;
 
-  // ── Input → movement (freeze on end-state) ──
+  // ── Movement ──
   if (active) {
-    const dir    = input.getDirection();
-    const moving = Math.abs(dir.x) > 0.01 || Math.abs(dir.y) > 0.01;
-    if (moving) {
+    const dir = input.getDirection();
+    if (Math.abs(dir.x) > 0.01 || Math.abs(dir.y) > 0.01) {
       player.move(dir.x, dir.y, dt, level);
       if (hintVisible) { hintVisible = false; elHint?.classList.add('hidden'); }
     }
-    if (hintVisible) {
-      hintTimer += dt;
-      if (hintTimer > 3.5) { hintVisible = false; elHint?.classList.add('hidden'); }
+    if (hintVisible && (hintTimer += dt) > 3.5) {
+      hintVisible = false; elHint?.classList.add('hidden');
     }
   }
-
   player.update(dt);
 
-  // ── Guards ──
+  // ── Guards (freeze while harvest card is showing) ──
   let maxSuspicion = 0;
-  for (const guard of guards) {
-    const s = guard.update(dt, player.getPosition(), active);
+  for (const g of guards) {
+    const s = g.update(dt, player.getPosition(), active && !harvestModal.isOpen);
     if (s > maxSuspicion) maxSuspicion = s;
   }
 
-  // ── Dossier ──
-  dossier.update(dt);
-  const canInteract = active && !hasDossier && dossier.canInteract(player.getPosition());
-
-  if (canInteract && input.consumeInteract()) {
-    dossier.collect();
-    hasDossier = true;
+  // ── Dossier interaction ──
+  let interactable = null;
+  for (const d of dossiers) {
+    d.update(dt);
+    if (active && !harvestModal.isOpen && d.canInteract(player.getPosition())) {
+      interactable = d;
+    }
   }
 
-  // ── Exit zone ──
-  const pos2 = player.getPosition();
-  const toExit = pos2.distanceTo(EXIT_POS);
-  const atExit = toExit < EXIT_RADIUS;
+  if (interactable && input.consumeInteract()) {
+    const typeId = interactable.typeId;
+    interactable.collect();
+    harvestModal.show(typeId, market).then(() => {
+      inventory.push(typeId);
+      renderInventory();
+    });
+  }
 
-  // Pulse exit ring when player holds dossier
+  // ── Exit trigger ──
+  if (!missionDone && active && player.getPosition().distanceTo(EXIT_POS) < EXIT_RADIUS) {
+    missionDone = true;
+    triggerExit();
+  }
+
+  // Pulse exit glow when carrying dossiers
   exitPulse += dt;
-  const exitGlow = hasDossier ? (0.12 + Math.sin(exitPulse * 3) * 0.06) : 0.07;
-  exitMat.opacity = exitGlow;
+  exitDiscMat.opacity = inventory.length > 0
+    ? 0.10 + Math.sin(exitPulse * 3) * 0.05
+    : 0.07;
 
   // ── Game state ──
-  gameState.update(dt, maxSuspicion, atExit, hasDossier);
+  gameState.update(dt, maxSuspicion);
+  updateAlertHUD();
 
-  // ── HUD ──
-  updateHUD(canInteract, hasDossier);
+  if (gameState.isCaught && !missionDone) {
+    missionDone = true;
+    showEndOverlay('caught');
+  }
 
-  // ── Camera ──
+  // ── Harvest button visibility ──
+  if (elHarvestBtn) elHarvestBtn.classList.toggle('hidden', !interactable || modalOpen);
+
+  // ── Camera + render ──
   isoCamera.follow(player.getPosition(), dt);
-
   renderer.render(scene, isoCamera.threeCamera);
 }
 
